@@ -4,6 +4,8 @@
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 const API_KEY = process.env.FINNHUB_API_KEY || '';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const STOCKS_TO_FETCH = [
   'NVDA', 'MSFT', 'AAPL', 'GOOGL', 'AMZN', 'TSLA', // Tech
@@ -11,6 +13,29 @@ const STOCKS_TO_FETCH = [
   'LLY', 'UNH', 'JNJ', 'MRK', 'PFE', // Health
   'XOM', 'CVX', 'COP', 'MPC', // Energy
 ];
+
+const COMPANY_NAMES: Record<string, string> = {
+  NVDA: 'NVIDIA Corp',
+  MSFT: 'Microsoft Corp',
+  AAPL: 'Apple Inc',
+  GOOGL: 'Alphabet Inc',
+  AMZN: 'Amazon.com Inc',
+  TSLA: 'Tesla Inc',
+  JPM: 'JPMorgan Chase & Co',
+  V: 'Visa Inc',
+  MA: 'Mastercard Inc',
+  WFC: 'Wells Fargo & Co',
+  BAC: 'Bank of America Corp',
+  LLY: 'Eli Lilly and Co',
+  UNH: 'UnitedHealth Group Inc',
+  JNJ: 'Johnson & Johnson',
+  MRK: 'Merck & Co Inc',
+  PFE: 'Pfizer Inc',
+  XOM: 'Exxon Mobil Corp',
+  CVX: 'Chevron Corp',
+  COP: 'ConocoPhillips',
+  MPC: 'Marathon Petroleum Corp',
+};
 
 interface StockQuote {
   c: number; // current price
@@ -62,10 +87,14 @@ export async function GET(request: Request) {
       try {
         const response = await fetch(
           `${FINNHUB_BASE_URL}/quote?symbol=${symbol}&token=${API_KEY}`,
-          { next: { revalidate: 60 } }
+          { cache: 'no-store' }
         );
 
         if (!response.ok) continue;
+        if (!response.headers.get('content-type')?.includes('application/json')) {
+          console.error(`Unexpected Finnhub response for ${symbol}: ${response.status}`);
+          continue;
+        }
 
         const quote: StockQuote = await response.json();
 
@@ -73,21 +102,9 @@ export async function GET(request: Request) {
           const change = quote.c - quote.pc;
           const changePercent = (change / quote.pc) * 100;
 
-          // Get company profile for name
-          const profileRes = await fetch(
-            `${FINNHUB_BASE_URL}/company-profile2?symbol=${symbol}&token=${API_KEY}`,
-            { next: { revalidate: 3600 } }
-          );
-
-          let name = symbol;
-          if (profileRes.ok) {
-            const profile = await profileRes.json();
-            name = profile.name || symbol;
-          }
-
           const stockData: StockData = {
             sym: symbol,
-            name,
+            name: COMPANY_NAMES[symbol] || symbol,
             price: parseFloat(quote.c.toFixed(2)),
             change: parseFloat(change.toFixed(2)),
             changePercent: parseFloat(changePercent.toFixed(2)),
